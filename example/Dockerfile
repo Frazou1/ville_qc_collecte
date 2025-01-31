@@ -1,12 +1,23 @@
-# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-dockerfile
-ARG BUILD_FROM
-FROM $BUILD_FROM
+# On part d'une image Python légère
+FROM python:3.11-slim
 
-# Execute during the build of the image
-ARG TEMPIO_VERSION BUILD_ARCH
-RUN \
-    curl -sSLf -o /usr/bin/tempio \
-    "https://github.com/home-assistant/tempio/releases/download/${TEMPIO_VERSION}/tempio_${BUILD_ARCH}"
+# Installations système pour que Chrome/Chromium + Selenium fonctionnent
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    chromium-driver \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy root filesystem
-COPY rootfs /
+# Installer les packages Python nécessaires
+RUN pip install --no-cache-dir selenium==4.* webdriver-manager==4.* \
+    beautifulsoup4 paho-mqtt
+
+# Copier les fichiers de l'add-on
+COPY run.sh /run.sh
+COPY script.py /script.py
+
+# Rendre exécutable
+RUN chmod a+x /run.sh
+
+# Point d'entrée
+CMD [ "/run.sh" ]
