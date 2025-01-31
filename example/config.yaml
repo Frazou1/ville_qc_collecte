@@ -1,20 +1,31 @@
-# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
-name: Ville Quebec Collecte Ordure
-version: "1.2.0"
-slug: example
-description: Ville Quebec Collecte Ordure
-url: "https://github.com/Frazou1/ville_qc_collecte"
+name: Ville Québec Collecte Add-on
+version: "1.0.0"
+slug: ville_qc_collecte_addon
+
+description: "Collectes ordures/recyclage à Québec"
 arch:
-  - armhf
-  - armv7
-  - aarch64
   - amd64
-  - i386
-init: false
-map:
-  - share:rw
+  - armv7
+  - armhf
+  - arm64
+
+startup: application
+boot: manual
+
 options:
-  message: "Hello world..."
+  address: "2352 Rue de l'Alliance"
+  update_interval: 3600  # en secondes (ex: 1h)
+  mqtt_host: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+
 schema:
-  message: "str?"
-image: "ghcr.io/home-assistant/{arch}-addon-example"
+  address: str
+  update_interval: int
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_username: str
+  mqtt_password: str
+
+image: "local/ville_qc_collecte_addon:latest"
