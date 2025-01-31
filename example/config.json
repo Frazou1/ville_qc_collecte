@@ -1,0 +1,26 @@
+{
+  "name": "Ville Québec Collecte Add-on",
+  "version": "1.0.0",
+  "slug": "ville_qc_collecte_addon",
+  "description": "Scraping des collectes (ordures/recyclage) Ville de Québec via Selenium",
+  "arch": ["amd64", "armv7", "armhf", "arm64"],
+  "startup": "application",
+  "boot": "manual",
+  "options": {
+    "address": "2352 Rue de l'Alliance",
+    "update_interval": 3600,
+    "mqtt_host": "core-mosquitto",
+    "mqtt_port": 1883,
+    "mqtt_username": "",
+    "mqtt_password": ""
+  },
+  "schema": {
+    "address": "str",
+    "update_interval": "int",
+    "mqtt_host": "str",
+    "mqtt_port": "int",
+    "mqtt_username": "str",
+    "mqtt_password": "str"
+  },
+  "image": "local/ville_qc_collecte_addon:latest"
+}
