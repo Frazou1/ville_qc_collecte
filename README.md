@@ -35,7 +35,7 @@
 
 | Key              | Description                                                    | Default                    |
 |------------------|----------------------------------------------------------------|----------------------------|
-| `address`        | The address to look up                                        | `"2352 Rue de l'Alliance"` |
+| `address`        | The address to look up                                        | `"123 rue des tulippes"` |
 | `update_interval`| How frequently (in seconds) to re-check the Info-Collecte site | `3600` (1 hour)            |
 | `mqtt_host`      | The MQTT broker hostname                                      | `"core-mosquitto"`         |
 | `mqtt_port`      | The MQTT broker port                                          | `1883`                     |
