@@ -1,9 +1,9 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
-name: Example add-on
+name: Ville Quebec Collecte Ordure
 version: "1.2.0"
 slug: example
-description: Example add-on
-url: "https://github.com/home-assistant/addons-example/tree/main/example"
+description: Ville Quebec Collecte Ordure
+url: "https://github.com/Frazou1/ville_qc_collecte"
 arch:
   - armhf
   - armv7
