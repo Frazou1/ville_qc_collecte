@@ -27,4 +27,4 @@ schema:
   mqtt_port: int
   mqtt_username: str
   mqtt_password: str
-image: "ghcr.io/home-assistant/{arch}-addon-example"
+image: "local/ville_qc_collecte_addon:latest"
