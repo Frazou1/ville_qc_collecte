@@ -44,6 +44,19 @@
 
 ---
 
+## Automation Exemple
+```alias: Alerte collecte en erreur
+trigger:
+  - platform: state
+    entity_id: sensor.collecte_status
+    to: "error"
+action:
+  - service: notify.persistent_notification
+    data:
+      title: "Ville QC Collecte"
+      message: "Le scraping a échoué."
+```
+
 ## Architectures
 
 ![Supports aarch64 Architecture][aarch64-shield]
