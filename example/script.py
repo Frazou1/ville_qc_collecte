@@ -2,7 +2,6 @@ import argparse
 import json
 import time
 
-# MQTT
 import paho.mqtt.client as mqtt
 
 # Selenium
@@ -14,21 +13,25 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from bs4 import BeautifulSoup
-from datetime import datetime
-import re
+from datetime import datetime, date
 
 def publish_sensor(client, topic_base, sensor_name, state, attributes=None):
     """
-    Publie un sensor via MQTT Discovery.
+    Publie un capteur via MQTT Discovery.
+    
+    - 'topic_base' : ex "homeassistant/sensor/ville_qc_collecte"
+    - 'sensor_name': "ordures", "recyclage", ou "status"
+    - 'state'      : la valeur du capteur (string)
+    - 'attributes' : dict supplémentaire (pour attributs JSON)
     """
-    # Topic de config
     config_topic = f"{topic_base}/{sensor_name}/config"
-    # Topic de state
     state_topic = f"{topic_base}/{sensor_name}/state"
+    attr_topic = f"{topic_base}/{sensor_name}/attributes"
 
     device_name = "VilleQCCollecte"
     unique_id = f"ville_qc_{sensor_name}"
 
+    # Construction du payload de config
     config_payload = {
         "name": f"Collecte {sensor_name}",
         "state_topic": state_topic,
@@ -36,20 +39,22 @@ def publish_sensor(client, topic_base, sensor_name, state, attributes=None):
         "device": {
             "identifiers": ["ville_qc_collecte_device"],
             "name": device_name,
-            "manufacturer": "Ville de Québec",
+            "manufacturer": "Ville de Québec"
         }
     }
 
-    # Gérer les attributs
+    # Gérer les attributs sous forme JSON
     if attributes:
-        attr_topic = f"{topic_base}/{sensor_name}/attributes"
         config_payload["json_attributes_topic"] = attr_topic
-        # Publier le JSON des attributs
         client.publish(attr_topic, json.dumps(attributes), retain=True)
+    else:
+        # S'il n'y a pas d'attribut, on peut laisser de côté l'attr_topic
+        pass
 
-    # Publier la config (retain pour discovery)
+    # Publier la config (retenue pour que HA la détecte durablement)
     client.publish(config_topic, json.dumps(config_payload), retain=True)
-    # Publier l’état
+
+    # Publier l'état (retenu aussi)
     client.publish(state_topic, state, retain=True)
 
 def main():
@@ -61,44 +66,49 @@ def main():
     parser.add_argument("--mqtt_pass", default="")
 
     args = parser.parse_args()
-
     ADDRESS = args.address
     MQTT_HOST = args.mqtt_host
     MQTT_PORT = int(args.mqtt_port)
     MQTT_USER = args.mqtt_user
     MQTT_PASS = args.mqtt_pass
 
-    print(f"[SCRIPT] Lancement avec adresse = {ADDRESS}")
+    print(f"[SCRIPT] Démarrage avec adresse={ADDRESS}")
 
     # Connexion MQTT
     client = mqtt.Client()
     if MQTT_USER:
         client.username_pw_set(MQTT_USER, MQTT_PASS)
+
     try:
         client.connect(MQTT_HOST, MQTT_PORT, 60)
         client.loop_start()
         print("[SCRIPT] Connecté à MQTT.")
     except Exception as e:
-        print(f"[ERREUR] Connexion MQTT impossible : {e}")
+        print(f"[ERREUR] Impossible de se connecter à MQTT: {e}")
         return
 
-    # Préparation Selenium
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--no-sandbox")
+    # On définit un statut par défaut à "success". En cas d'erreur, on le change.
+    status = "success"
 
-    # Sur la plupart des installations, on a chromium-driver dans /usr/bin
-    service = Service("/usr/bin/chromedriver")
-
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    ordures_dates = []
+    recyclage_dates = []
 
     try:
+        # Selenium en mode headless
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--no-sandbox")
+        service = Service("/usr/bin/chromedriver")  # Ou le chemin où se trouve ton chromedriver
+
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+
+        # Accéder à la page
         url_main = "https://www.ville.quebec.qc.ca/services/info-collecte/"
-        print(f"[SCRIPT] Accès à la page: {url_main}")
+        print(f"[SCRIPT] Accès: {url_main}")
         driver.get(url_main)
 
-        # Trouver le champ d’adresse
+        # Trouver le champ d'adresse
         field = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((
                 By.NAME,
@@ -107,7 +117,6 @@ def main():
         )
         field.clear()
         field.send_keys(ADDRESS)
-        print(f"[SCRIPT] Adresse saisie : {ADDRESS}")
 
         # Bouton Rechercher
         search_button = driver.find_element(
@@ -116,28 +125,19 @@ def main():
         )
         search_button.click()
 
-        # Attendre l'apparition de "table.calendrier"
+        # Attendre le calendrier
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table.calendrier"))
         )
-        print("[SCRIPT] Calendriers détectés.")
+        print("[SCRIPT] Calendrier détecté.")
 
         # Parser
         soup = BeautifulSoup(driver.page_source, "html.parser")
         tables = soup.find_all("table", class_="calendrier")
         if not tables:
-            print("[SCRIPT] Aucune table calendrier trouvée.")
-            publish_sensor(client, "homeassistant/sensor/ville_qc_collecte", "erreur", "No table found")
-            return
+            raise RuntimeError("Aucune table 'calendrier' trouvée !")
 
-        # Extraire ordures / recyclage
-        from datetime import date
-        today = date.today()
-
-        ordures_dates = []
-        recyclage_dates = []
-
-        # Mapping mois en minuscule -> numéro
+        # Mapping de mois (en minuscule) -> numéro
         months_map = {
             "janvier": 1, "février": 2, "fevrier": 2, "mars": 3,
             "avril": 4, "mai": 5, "juin": 6, "juillet": 7,
@@ -145,13 +145,16 @@ def main():
             "novembre": 11, "décembre": 12
         }
 
+        today = date.today()
+
         for table in tables:
             caption = table.find("caption")
             if caption:
-                text_caption = caption.get_text(strip=True).lower()
+                caption_txt = caption.get_text(strip=True).lower()
             else:
-                text_caption = ""
-            parts = text_caption.split()
+                caption_txt = ""
+
+            parts = caption_txt.split()
             if len(parts) >= 2:
                 month_str = parts[0]
                 year_str = parts[1]
@@ -175,7 +178,6 @@ def main():
                 except:
                     continue
 
-                # Type de collecte ? (img alt)
                 picto = td.find("p", class_="img")
                 if picto:
                     img = picto.find("img")
@@ -186,8 +188,13 @@ def main():
                         elif "recyclage" in alt:
                             recyclage_dates.append(dt)
 
-        def next_future(dates_list):
-            fut = [d for d in dates_list if d >= today]
+        # Vérifier si on a trouvé au moins une date
+        if not ordures_dates and not recyclage_dates:
+            raise ValueError("Aucune collecte trouvée pour l'adresse donnée.")
+
+        # Déterminer la prochaine date >= today
+        def next_future(dates):
+            fut = [d for d in dates if d >= today]
             if not fut:
                 return None
             return min(fut)
@@ -197,30 +204,63 @@ def main():
         str_ordures = next_ordures.isoformat() if next_ordures else "N/A"
         str_recyclage = next_recyclage.isoformat() if next_recyclage else "N/A"
 
-        print(f"[SCRIPT] Prochaines collectes : ordures={str_ordures}, recyclage={str_recyclage}")
+        print(f"[SCRIPT] Prochaine ordures = {str_ordures}, recyclage = {str_recyclage}")
 
-        # Publication via MQTT Discovery
-        topic_base = "homeassistant/sensor/ville_qc_collecte"
+    except Exception as e:
+        status = f"error: {e}"
+        print(f"[SCRIPT] ERREUR: {e}")
+    finally:
+        # Fermer Selenium si on l’a ouvert
+        try:
+            driver.quit()
+        except:
+            pass
+
+    # Publication MQTT
+    topic_base = "homeassistant/sensor/ville_qc_collecte"
+
+    # 1) Capteur "status" (pour surveiller succès / erreur)
+    publish_sensor(
+        client,
+        topic_base,
+        "status",
+        state=status,
+        attributes={}
+    )
+
+    # 2) Capteur "ordures"
+    # S’il y a un statut d’erreur, on peut publier "N/A" ou la dernière date connue
+    if status.startswith("error"):
+        publish_sensor(client, topic_base, "ordures", "error", attributes={})
+    else:
         publish_sensor(
             client,
             topic_base,
             "ordures",
             str_ordures,
-            attributes={"dates": [d.isoformat() for d in sorted(ordures_dates)]}
+            attributes={
+                "all_dates": [d.isoformat() for d in sorted(ordures_dates)]
+            }
         )
+
+    # 3) Capteur "recyclage"
+    if status.startswith("error"):
+        publish_sensor(client, topic_base, "recyclage", "error", attributes={})
+    else:
         publish_sensor(
             client,
             topic_base,
             "recyclage",
             str_recyclage,
-            attributes={"dates": [d.isoformat() for d in sorted(recyclage_dates)]}
+            attributes={
+                "all_dates": [d.isoformat() for d in sorted(recyclage_dates)]
+            }
         )
 
-    finally:
-        driver.quit()
-        client.loop_stop()
-        client.disconnect()
-
+    # Clean up MQTT
+    client.loop_stop()
+    client.disconnect()
+    print("[SCRIPT] Terminé.")
 
 if __name__ == "__main__":
     main()
