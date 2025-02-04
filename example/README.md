@@ -89,9 +89,13 @@ Creating Calendar Events
 When HA integration options are provided, the add-on calls an HA script to create calendar events for garbage and recycling collections. To enable this feature, you must define a script in Home Assistant (e.g. script.create_calendar_event) that accepts the following variables:
 
 -calendar_entity
+
 -start_date
+
 -end_date
+
 -summary
+
 -description
 
 ```
