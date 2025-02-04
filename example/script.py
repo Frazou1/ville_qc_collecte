@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import time
 from datetime import datetime, date, timedelta
 
@@ -16,8 +17,32 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from bs4 import BeautifulSoup
 
+# Fichier pour mémoriser l'état des événements créés
+STATE_FILE = "/data/last_events.json"
+
+def load_last_events():
+    """Charge les dernières dates d'événements créés depuis le fichier d'état."""
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[SCRIPT] Erreur lors du chargement de l'état: {e}")
+            return {}
+    return {}
+
+def save_last_events(state):
+    """Enregistre l'état (dates des événements créés) dans le fichier."""
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"[SCRIPT] Erreur lors de l'enregistrement de l'état: {e}")
+
 def publish_sensor(client, topic_base, sensor_name, state, attributes=None):
-    # (Fonction inchangée)
+    """
+    Publie un capteur via MQTT Discovery.
+    """
     config_topic = f"{topic_base}/{sensor_name}/config"
     state_topic = f"{topic_base}/{sensor_name}/state"
     attr_topic = f"{topic_base}/{sensor_name}/attributes"
@@ -46,12 +71,13 @@ def publish_sensor(client, topic_base, sensor_name, state, attributes=None):
 def create_event_in_ha(ha_url, ha_token, ha_calendar_entity, event_date, event_summary, event_description):
     """
     Appelle l'API Home Assistant pour créer un événement en appelant le script 'create_calendar_event'.
-    Ce script doit être créé dans HA et doit accepter les variables suivantes :
+    Le script HA doit être configuré pour accepter les variables :
       - calendar_entity
-      - start_date (au format "YYYY-MM-DD")
-      - end_date   (au format "YYYY-MM-DD")
+      - start_date
+      - end_date
       - summary
       - description
+    Ici, nous utilisons le service script.turn_on.
     """
     url = f"{ha_url}/api/services/script/turn_on"
     headers = {
@@ -222,24 +248,40 @@ def main():
         except:
             pass
 
+    # Gestion de l'état pour éviter les doublons dans le calendrier
+    last_events = load_last_events()
+
     # Si l'intégration HA est configurée et que le scraping s'est bien passé, créer les événements
     if HA_URL and HA_TOKEN and HA_CALENDAR_ENTITY and status == "success":
-        try:
-            if next_ordures:
-                create_event_in_ha(HA_URL, HA_TOKEN, HA_CALENDAR_ENTITY,
-                                   next_ordures.isoformat(),
-                                   "Collecte ordures",
-                                   f"Prochaine collecte d'ordures prévue le {next_ordures.isoformat()}")
-        except Exception as e:
-            print(f"[SCRIPT] Erreur lors de la création de l'événement d'ordures: {e}")
-        try:
-            if next_recyclage:
-                create_event_in_ha(HA_URL, HA_TOKEN, HA_CALENDAR_ENTITY,
-                                   next_recyclage.isoformat(),
-                                   "Collecte recyclage",
-                                   f"Prochaine collecte de recyclage prévue le {next_recyclage.isoformat()}")
-        except Exception as e:
-            print(f"[SCRIPT] Erreur lors de la création de l'événement de recyclage: {e}")
+        # Pour l'événement "ordures"
+        if next_ordures:
+            if last_events.get("ordures") != next_ordures.isoformat():
+                try:
+                    create_event_in_ha(HA_URL, HA_TOKEN, HA_CALENDAR_ENTITY,
+                                       next_ordures.isoformat(),
+                                       "Collecte ordures",
+                                       f"Prochaine collecte d'ordures prévue le {next_ordures.isoformat()}")
+                    last_events["ordures"] = next_ordures.isoformat()
+                except Exception as e:
+                    print(f"[SCRIPT] Erreur lors de la création de l'événement d'ordures: {e}")
+            else:
+                print("[SCRIPT] L'événement d'ordures est déjà à jour.")
+        # Pour l'événement "recyclage"
+        if next_recyclage:
+            if last_events.get("recyclage") != next_recyclage.isoformat():
+                try:
+                    create_event_in_ha(HA_URL, HA_TOKEN, HA_CALENDAR_ENTITY,
+                                       next_recyclage.isoformat(),
+                                       "Collecte recyclage",
+                                       f"Prochaine collecte de recyclage prévue le {next_recyclage.isoformat()}")
+                    last_events["recyclage"] = next_recyclage.isoformat()
+                except Exception as e:
+                    print(f"[SCRIPT] Erreur lors de la création de l'événement de recyclage: {e}")
+            else:
+                print("[SCRIPT] L'événement de recyclage est déjà à jour.")
+
+        # Sauvegarde de l'état mis à jour
+        save_last_events(last_events)
 
     # Publication MQTT des capteurs
     topic_base = "homeassistant/sensor/ville_qc_collecte"
