@@ -124,7 +124,7 @@ def main():
     print(f"[SCRIPT] Démarrage avec adresse={ADDRESS}")
 
     # Connexion MQTT
-    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.v2)
+    client = mqtt.Client()
     if MQTT_USER:
         client.username_pw_set(MQTT_USER, MQTT_PASS)
 
