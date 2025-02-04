@@ -4,7 +4,6 @@ import time
 from datetime import datetime, date, timedelta
 
 import requests  # Pour effectuer des requêtes HTTP
-
 import paho.mqtt.client as mqtt
 
 # Selenium
@@ -18,9 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 
 def publish_sensor(client, topic_base, sensor_name, state, attributes=None):
-    """
-    Publie un capteur via MQTT Discovery.
-    """
+    # (Fonction inchangée)
     config_topic = f"{topic_base}/{sensor_name}/config"
     state_topic = f"{topic_base}/{sensor_name}/state"
     attr_topic = f"{topic_base}/{sensor_name}/attributes"
@@ -48,25 +45,32 @@ def publish_sensor(client, topic_base, sensor_name, state, attributes=None):
 
 def create_event_in_ha(ha_url, ha_token, ha_calendar_entity, event_date, event_summary, event_description):
     """
-    Appelle l'API Home Assistant pour créer un événement.
-    On suppose ici que tu as créé dans HA un script (ex: script.create_calendar_event)
-    qui prend en charge la création de l'événement.
+    Appelle l'API Home Assistant pour créer un événement en appelant le script 'create_calendar_event'.
+    Ce script doit être créé dans HA et doit accepter les variables suivantes :
+      - calendar_entity
+      - start_date (au format "YYYY-MM-DD")
+      - end_date   (au format "YYYY-MM-DD")
+      - summary
+      - description
     """
-    url = f"{ha_url}/api/services/script/create_calendar_event"
+    url = f"{ha_url}/api/services/script/turn_on"
     headers = {
         "Authorization": f"Bearer {ha_token}",
         "Content-Type": "application/json",
     }
     payload = {
-        "entity_id": ha_calendar_entity,
-        "start_date": event_date,  # Format "YYYY-MM-DD"
-        "end_date": event_date,    # Événement d'une journée
-        "summary": event_summary,
-        "description": event_description,
+        "entity_id": "script.create_calendar_event",
+        "variables": {
+            "calendar_entity": ha_calendar_entity,
+            "start_date": event_date,
+            "end_date": event_date,
+            "summary": event_summary,
+            "description": event_description,
+        }
     }
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code != 200:
-        raise Exception(f"Erreur lors de la création de l'événement : {response.text}")
+        raise Exception(f"Erreur lors de la création de l'événement : {response.status_code}: {response.text}")
     print(f"[SCRIPT] Événement créé dans HA: {event_summary} pour le {event_date}")
 
 def main():
