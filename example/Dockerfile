@@ -12,9 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Installer les packages Python
+# Installer les packages Python nécessaires (ajout de "requests")
 RUN pip install --no-cache-dir selenium==4.* webdriver-manager==4.* \
-    beautifulsoup4 paho-mqtt
+    beautifulsoup4 paho-mqtt requests
 
 COPY run.sh /run.sh
 COPY script.py /script.py
