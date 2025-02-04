@@ -1,6 +1,7 @@
 import argparse
 import json
 import time
+from datetime import datetime, date, timedelta  # Ajout de timedelta pour le calcul DTEND
 
 import paho.mqtt.client as mqtt
 
@@ -13,49 +14,51 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from bs4 import BeautifulSoup
-from datetime import datetime, date
 
-def publish_sensor(client, topic_base, sensor_name, state, attributes=None):
+# ... (le reste de tes imports et code inchangés)
+
+def generate_ics(file_path, ordures_dates, recyclage_dates, today):
     """
-    Publie un capteur via MQTT Discovery.
-    
-    - 'topic_base' : ex "homeassistant/sensor/ville_qc_collecte"
-    - 'sensor_name': "ordures", "recyclage", ou "status"
-    - 'state'      : la valeur du capteur (string)
-    - 'attributes' : dict supplémentaire (pour attributs JSON)
+    Génère un fichier ICS contenant les événements de collecte à partir des listes de dates.
+    Seules les dates >= aujourd'hui seront ajoutées.
     """
-    config_topic = f"{topic_base}/{sensor_name}/config"
-    state_topic = f"{topic_base}/{sensor_name}/state"
-    attr_topic = f"{topic_base}/{sensor_name}/attributes"
-
-    device_name = "VilleQCCollecte"
-    unique_id = f"ville_qc_{sensor_name}"
-
-    # Construction du payload de config
-    config_payload = {
-        "name": f"Collecte {sensor_name}",
-        "state_topic": state_topic,
-        "unique_id": unique_id,
-        "device": {
-            "identifiers": ["ville_qc_collecte_device"],
-            "name": device_name,
-            "manufacturer": "Ville de Québec"
-        }
-    }
-
-    # Gérer les attributs sous forme JSON
-    if attributes:
-        config_payload["json_attributes_topic"] = attr_topic
-        client.publish(attr_topic, json.dumps(attributes), retain=True)
-    else:
-        # S'il n'y a pas d'attribut, on peut laisser de côté l'attr_topic
-        pass
-
-    # Publier la config (retenue pour que HA la détecte durablement)
-    client.publish(config_topic, json.dumps(config_payload), retain=True)
-
-    # Publier l'état (retenu aussi)
-    client.publish(state_topic, state, retain=True)
+    now_str = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    lines = []
+    lines.append("BEGIN:VCALENDAR")
+    lines.append("VERSION:2.0")
+    lines.append("PRODID:-//VilleQCCollecte Addon//EN")
+    lines.append("CALSCALE:GREGORIAN")
+    # Événements pour ordures
+    for d in sorted(ordures_dates):
+        if d < today:
+            continue
+        dtstart = d.strftime("%Y%m%d")
+        dtend = (d + timedelta(days=1)).strftime("%Y%m%d")
+        uid = f"ordures-{d.isoformat()}@villeqc"
+        lines.append("BEGIN:VEVENT")
+        lines.append(f"UID:{uid}")
+        lines.append(f"DTSTAMP:{now_str}")
+        lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
+        lines.append(f"DTEND;VALUE=DATE:{dtend}")
+        lines.append("SUMMARY:Collecte ordures")
+        lines.append("END:VEVENT")
+    # Événements pour recyclage
+    for d in sorted(recyclage_dates):
+        if d < today:
+            continue
+        dtstart = d.strftime("%Y%m%d")
+        dtend = (d + timedelta(days=1)).strftime("%Y%m%d")
+        uid = f"recyclage-{d.isoformat()}@villeqc"
+        lines.append("BEGIN:VEVENT")
+        lines.append(f"UID:{uid}")
+        lines.append(f"DTSTAMP:{now_str}")
+        lines.append(f"DTSTART;VALUE=DATE:{dtstart}")
+        lines.append(f"DTEND;VALUE=DATE:{dtend}")
+        lines.append("SUMMARY:Collecte recyclage")
+        lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
 
 def main():
     parser = argparse.ArgumentParser()
@@ -64,17 +67,19 @@ def main():
     parser.add_argument("--mqtt_port", default="1883")
     parser.add_argument("--mqtt_user", default="")
     parser.add_argument("--mqtt_pass", default="")
-
+    # Nouvelle option pour le calendrier ICS
+    parser.add_argument("--calendar_file", default="", help="Chemin du fichier .ics pour générer le calendrier")
     args = parser.parse_args()
     ADDRESS = args.address
     MQTT_HOST = args.mqtt_host
     MQTT_PORT = int(args.mqtt_port)
     MQTT_USER = args.mqtt_user
     MQTT_PASS = args.mqtt_pass
+    calendar_file = args.calendar_file.strip()  # Peut être vide
 
     print(f"[SCRIPT] Démarrage avec adresse={ADDRESS}")
 
-    # Connexion MQTT
+    # Connexion MQTT et autres parties inchangées...
     client = mqtt.Client()
     if MQTT_USER:
         client.username_pw_set(MQTT_USER, MQTT_PASS)
@@ -87,28 +92,22 @@ def main():
         print(f"[ERREUR] Impossible de se connecter à MQTT: {e}")
         return
 
-    # On définit un statut par défaut à "success". En cas d'erreur, on le change.
     status = "success"
-
     ordures_dates = []
     recyclage_dates = []
+    today = date.today()  # On définit la date d'aujourd'hui
 
     try:
-        # Selenium en mode headless
+        # Partie Selenium et scraping (inchangée)
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--no-sandbox")
-        service = Service("/usr/bin/chromedriver")  # Ou le chemin où se trouve ton chromedriver
-
+        service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        # Accéder à la page
         url_main = "https://www.ville.quebec.qc.ca/services/info-collecte/"
         print(f"[SCRIPT] Accès: {url_main}")
         driver.get(url_main)
-
-        # Trouver le champ d'adresse
         field = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((
                 By.NAME,
@@ -117,43 +116,28 @@ def main():
         )
         field.clear()
         field.send_keys(ADDRESS)
-
-        # Bouton Rechercher
         search_button = driver.find_element(
             By.NAME,
             "ctl00$ctl00$contenu$texte_page$ucInfoCollecteRechercheAdresse$RechercheAdresse$BtnRue"
         )
         search_button.click()
-
-        # Attendre le calendrier
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table.calendrier"))
         )
         print("[SCRIPT] Calendrier détecté.")
-
-        # Parser
         soup = BeautifulSoup(driver.page_source, "html.parser")
         tables = soup.find_all("table", class_="calendrier")
         if not tables:
             raise RuntimeError("Aucune table 'calendrier' trouvée !")
-
-        # Mapping de mois (en minuscule) -> numéro
         months_map = {
             "janvier": 1, "février": 2, "fevrier": 2, "mars": 3,
             "avril": 4, "mai": 5, "juin": 6, "juillet": 7,
             "aout": 8, "août": 8, "septembre": 9, "octobre": 10,
             "novembre": 11, "décembre": 12
         }
-
-        today = date.today()
-
         for table in tables:
             caption = table.find("caption")
-            if caption:
-                caption_txt = caption.get_text(strip=True).lower()
-            else:
-                caption_txt = ""
-
+            caption_txt = caption.get_text(strip=True).lower() if caption else ""
             parts = caption_txt.split()
             if len(parts) >= 2:
                 month_str = parts[0]
@@ -163,7 +147,6 @@ def main():
             else:
                 month_num = 0
                 year_num = today.year
-
             for td in table.find_all("td"):
                 date_p = td.find("p", class_="date")
                 if not date_p:
@@ -171,13 +154,11 @@ def main():
                 day_str = date_p.get_text(strip=True)
                 if not day_str.isdigit():
                     continue
-
                 day_num = int(day_str)
                 try:
                     dt = datetime(year_num, month_num, day_num).date()
                 except:
                     continue
-
                 picto = td.find("p", class_="img")
                 if picto:
                     img = picto.find("img")
@@ -187,39 +168,37 @@ def main():
                             ordures_dates.append(dt)
                         elif "recyclage" in alt:
                             recyclage_dates.append(dt)
-
-        # Vérifier si on a trouvé au moins une date
         if not ordures_dates and not recyclage_dates:
             raise ValueError("Aucune collecte trouvée pour l'adresse donnée.")
-
-        # Déterminer la prochaine date >= today
         def next_future(dates):
             fut = [d for d in dates if d >= today]
             if not fut:
                 return None
             return min(fut)
-
         next_ordures = next_future(ordures_dates)
         next_recyclage = next_future(recyclage_dates)
         str_ordures = next_ordures.isoformat() if next_ordures else "N/A"
         str_recyclage = next_recyclage.isoformat() if next_recyclage else "N/A"
-
         print(f"[SCRIPT] Prochaine ordures = {str_ordures}, recyclage = {str_recyclage}")
-
     except Exception as e:
         status = f"error: {e}"
         print(f"[SCRIPT] ERREUR: {e}")
     finally:
-        # Fermer Selenium si on l’a ouvert
         try:
             driver.quit()
         except:
             pass
 
-    # Publication MQTT
-    topic_base = "homeassistant/sensor/ville_qc_collecte"
+    # Si une option de calendrier a été fournie et qu'il n'y a pas d'erreur, générer le fichier ICS
+    if calendar_file and not status.startswith("error"):
+        try:
+            generate_ics(calendar_file, ordures_dates, recyclage_dates, today)
+            print(f"[SCRIPT] Calendrier ICS généré à {calendar_file}")
+        except Exception as e:
+            print(f"[SCRIPT] Erreur lors de la génération du calendrier ICS: {e}")
 
-    # 1) Capteur "status" (pour surveiller succès / erreur)
+    # Publication MQTT (inchangée)
+    topic_base = "homeassistant/sensor/ville_qc_collecte"
     publish_sensor(
         client,
         topic_base,
@@ -227,9 +206,6 @@ def main():
         state=status,
         attributes={}
     )
-
-    # 2) Capteur "ordures"
-    # S’il y a un statut d’erreur, on peut publier "N/A" ou la dernière date connue
     if status.startswith("error"):
         publish_sensor(client, topic_base, "ordures", "error", attributes={})
     else:
@@ -242,8 +218,6 @@ def main():
                 "all_dates": [d.isoformat() for d in sorted(ordures_dates)]
             }
         )
-
-    # 3) Capteur "recyclage"
     if status.startswith("error"):
         publish_sensor(client, topic_base, "recyclage", "error", attributes={})
     else:
@@ -256,8 +230,6 @@ def main():
                 "all_dates": [d.isoformat() for d in sorted(recyclage_dates)]
             }
         )
-
-    # Clean up MQTT
     client.loop_stop()
     client.disconnect()
     print("[SCRIPT] Terminé.")
