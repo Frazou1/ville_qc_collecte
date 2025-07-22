@@ -215,24 +215,21 @@ def main():
                     dt = datetime(year_num, month_num, day_num).date()
                 except:
                     continue
-                picto = td.find("p", class_="img")
-                if picto:
-                    img = picto.find("img")
-                    if img:
-                        alt = img.get("alt", "").lower()
-                        if "ordures" in alt:
-                            ordures_dates.append(dt)
-                        elif "recyclage" in alt:
-                            recyclage_dates.append(dt)
+
+                # Traitement de toutes les icônes présentes (ordures et/ou recyclage)
+                for img in td.select("p.img img"):
+                    alt = img.get("alt", "").lower()
+                    if "ordures" in alt:
+                        ordures_dates.append(dt)
+                    if "recyclage" in alt:
+                        recyclage_dates.append(dt)
 
         if not ordures_dates and not recyclage_dates:
             raise ValueError("Aucune collecte trouvée pour l'adresse donnée.")
 
         def next_future(dates):
             fut = [d for d in dates if d >= today]
-            if not fut:
-                return None
-            return min(fut)
+            return min(fut) if fut else None
 
         next_ordures = next_future(ordures_dates)
         next_recyclage = next_future(recyclage_dates)
@@ -241,19 +238,17 @@ def main():
         print(f"[SCRIPT] Prochaine ordures = {str_ordures}, recyclage = {str_recyclage}")
     except Exception as e:
         status = f"error: {e}"
-        print(f"[SCRIPT] ERREUR: {e}")
+        print(f"[SCRIPT] ÉRREUR: {e}")
     finally:
         try:
             driver.quit()
         except:
             pass
 
-    # Gestion de l'état pour éviter les doublons dans le calendrier
+    # Gestion de l'état pour éviter les doublons
     last_events = load_last_events()
 
-    # Si l'intégration HA est configurée et que le scraping s'est bien passé, créer les événements
     if HA_URL and HA_TOKEN and HA_CALENDAR_ENTITY and status == "success":
-        # Pour l'événement "ordures"
         if next_ordures:
             if last_events.get("ordures") != next_ordures.isoformat():
                 try:
@@ -263,10 +258,9 @@ def main():
                                        f"Prochaine collecte d'ordures prévue le {next_ordures.isoformat()}")
                     last_events["ordures"] = next_ordures.isoformat()
                 except Exception as e:
-                    print(f"[SCRIPT] Erreur lors de la création de l'événement d'ordures: {e}")
+                    print(f"Erreur lors de la création de l'événement d'ordures: {e}")
             else:
                 print("[SCRIPT] L'événement d'ordures est déjà à jour.")
-        # Pour l'événement "recyclage"
         if next_recyclage:
             if last_events.get("recyclage") != next_recyclage.isoformat():
                 try:
@@ -276,16 +270,13 @@ def main():
                                        f"Prochaine collecte de recyclage prévue le {next_recyclage.isoformat()}")
                     last_events["recyclage"] = next_recyclage.isoformat()
                 except Exception as e:
-                    print(f"[SCRIPT] Erreur lors de la création de l'événement de recyclage: {e}")
+                    print(f"Erreur lors de la création de l'événement de recyclage: {e}")
             else:
                 print("[SCRIPT] L'événement de recyclage est déjà à jour.")
-
-        # Sauvegarde de l'état mis à jour
         save_last_events(last_events)
 
     # Publication MQTT des capteurs
     topic_base = "homeassistant/sensor/ville_qc_collecte"
-
     publish_sensor(client, topic_base, "status", state=status, attributes={})
     if status.startswith("error"):
         publish_sensor(client, topic_base, "ordures", "error", attributes={})
@@ -293,7 +284,6 @@ def main():
         publish_sensor(client, topic_base, "ordures", str_ordures, attributes={
             "all_dates": [d.isoformat() for d in sorted(ordures_dates)]
         })
-
     if status.startswith("error"):
         publish_sensor(client, topic_base, "recyclage", "error", attributes={})
     else:
