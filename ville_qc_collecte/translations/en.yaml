@@ -1,0 +1,28 @@
+configuration:
+  address:
+    name: Address
+    description: Your civic address in Québec City, as typed on the Info-Collecte website (e.g. 430 4e rue).
+  update_interval:
+    name: Update interval
+    description: Seconds between two checks of the city website (minimum 300).
+  mqtt_host:
+    name: MQTT host
+    description: MQTT broker hostname. Use core-mosquitto for the Mosquitto add-on.
+  mqtt_port:
+    name: MQTT port
+    description: MQTT broker port.
+  mqtt_username:
+    name: MQTT username
+    description: Leave empty if the broker does not require authentication.
+  mqtt_password:
+    name: MQTT password
+    description: Leave empty if the broker does not require authentication.
+  ha_url:
+    name: Home Assistant URL
+    description: Only needed with a token below. Leave empty to use the add-on's built-in access.
+  ha_token:
+    name: Home Assistant token
+    description: Optional long-lived access token. Leave empty to use the add-on's built-in access.
+  ha_calendar_entity:
+    name: Calendar entity
+    description: Calendar where collection events are created (e.g. calendar.my_calendar). Leave empty to disable.
