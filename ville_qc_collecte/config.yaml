@@ -1,0 +1,36 @@
+# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-config
+name: Ville Quebec Collecte Add-on
+version: "1.4.0"
+# Slug conservé tel quel : le changer créerait un nouvel add-on (configuration perdue)
+# Slug kept as is: changing it would create a new add-on (configuration lost)
+slug: example
+description: "Ville de Québec garbage and recycling dates / Dates de collecte des ordures et du recyclage"
+url: "https://github.com/Frazou1/ville_qc_collecte"
+arch:
+  - armhf
+  - armv7
+  - aarch64
+  - amd64
+  - i386
+init: false
+homeassistant_api: true
+options:
+  address: ""
+  update_interval: 3600
+  mqtt_host: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+  ha_url: ""
+  ha_token: ""
+  ha_calendar_entity: ""
+schema:
+  address: str
+  update_interval: int
+  mqtt_host: str
+  mqtt_port: port
+  mqtt_username: str?
+  mqtt_password: password?
+  ha_url: str?
+  ha_token: password?
+  ha_calendar_entity: str?
