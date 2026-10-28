@@ -1,7 +1,5 @@
 # Ville de Québec – Info-Collecte
 
-**EN** — Next garbage and recycling collection dates for your Québec City address, as Home Assistant sensors and calendar events.
+**FR** — Lit le calendrier Info-Collecte de la Ville de Québec pour votre adresse et publie les prochaines dates de collecte des ordures et du recyclage en capteurs MQTT dans Home Assistant. En option, chaque collecte est ajoutée à un calendrier Home Assistant. Voir l'onglet **Documentation** ou la [documentation complète](https://github.com/Frazou1/ville_qc_collecte/blob/main/ville_qc_collecte/DOCS.md).
 
-**FR** — Prochaines dates de collecte des ordures et du recyclage de votre adresse à Québec, en capteurs et en événements de calendrier Home Assistant.
-
-See the **Documentation** tab / Voir l'onglet **Documentation**.
+**EN** — Reads the Ville de Québec Info-Collecte calendar for your address and publishes the next garbage and recycling collection dates as MQTT sensors in Home Assistant. Optionally, each collection is added to a Home Assistant calendar. See the **Documentation** tab or the [full documentation](https://github.com/Frazou1/ville_qc_collecte/blob/main/ville_qc_collecte/DOCS.md).
